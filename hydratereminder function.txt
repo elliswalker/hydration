@@ -1,0 +1,24 @@
+  function hydrateReminder(message) 
+  {
+    if (client.users.get(newMember).presence.status === 'online')
+    {
+      console.log(onlineMembers);
+      console.log(onlineUptime);
+      console.log("Reminder sent to " +newMember)
+      client.channels.find("name" , "hydration_room").send(client.users.get(newMember).toString() + ", You've been online for over " +onlineUptime[onlineMembers.indexOf(client.users.get(newMember).id)] +" hours. By this point, you should have consumed " +onlineUptime[onlineMembers.indexOf(client.users.get(newMember).id)] * 4 +"oz (" +onlineUptime[onlineMembers.indexOf(client.users.get(newMember).id)] * 120 +"mL) of water to maintain optimum hydration.");
+      onlineUptime[onlineMembers.indexOf(client.users.get(newMember).id)]++;
+    } 
+    //problem: if last newMember was offline, this would repeat the "offline" function which would end up removing all of the objects in the array, so maybe change newMember to another variable?
+    else if (client.users.get(newMember).presence.status === 'offline')
+    {
+      console.log("Stopping " +client.users.get(newMember).toString() +"'s reminders");
+      onlineUptime.splice(onlineMembers.indexOf(client.users.get(newMember).id), 1)
+      onlineMembers.splice(onlineMembers.indexOf(client.users.get(newMember).id), 1);
+      newMember = onlineMembers[onlineMembers.length-1];
+      if (onlineMembers.length == 0) 
+      {
+        console.log("Clearing Loop...");
+        clearInterval(loopVar);
+      }
+    }
+  } 
