@@ -14,10 +14,11 @@ client.login(process.env.TOKEN);
 client.on('ready', () => 
 {
   console.log('I am ready!');
+  client.channels.get(config.console).send("``` I am ready! ```");
   client.user.setActivity("h!help");
   client.setMaxListeners(11);
 });
-//main problem; people who go on and off repeatedly may be starting several timeout
+//main problem; people who go on and off repeatedly may be starting several timeout, to do: enmap storage for dehydration and onlineDaily
 client.on('message', message => {
   const args = message.content.slice(prefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
@@ -95,9 +96,10 @@ client.on('presenceUpdate', (oldMember, newMember) =>
   const hydrationChannel = newMember.guild.channels.find('name', 'hydration_room');
   newMember = newMember.id;
   var status = client.users.get(newMember).presence.status
-  var index = onlineMembers.indexOf(newMember);
+  var memberIndex = onlineMembers.indexOf(newMember);
   var time = new Date();
-  //for clearing onlineDaily
+  var hydrationLoop;
+  //for clearing onlineDaily - not developed by me
   // If we haven't checked yet, or if it's been more than 30 seconds since the last check
   if ( !lastUpdate || ( time.getTime() - lastUpdate.getTime() ) > 30000 ) 
   {
@@ -106,7 +108,7 @@ client.on('presenceUpdate', (oldMember, newMember) =>
     if ( time.getDate() !== today.getDate() ) 
     {
       // If the date has changed, set the date to the new date, and refresh stuff.
-      today = time
+      today = time;
       onlineDaily = [];
       consoleToChannel("Clearing onlineDaily...");
     }
@@ -122,14 +124,14 @@ client.on('presenceUpdate', (oldMember, newMember) =>
             {
               onlineMembers.push(newMember);
               onlineUptime.push(1);
-              //maybe move below line outside of if so it can send to multiple servers?
               consoleToChannel(newMember +" has logged in. Reminding " +newMember +" in 1 hour");
-              loopVar = setTimeout(hydrateReminder, 3600000);
+              loopVar = setTimeout(hydrateReminder, 3600000)
             }
             if (onlineDaily.includes(newMember) !== true)
             {
               onlineDaily.push(newMember);
               console.log("Daily reminder sent");
+              //maybe move below line outside of if so it can send to multiple servers?
               hydrationChannel.send("Hello " + client.users.get(newMember).toString() + ". Remember to stay hydrated!");
             }
           }
@@ -148,31 +150,19 @@ client.on('presenceUpdate', (oldMember, newMember) =>
     {
       if (onlineMembers.includes(newMember) === true)
       {
-        var hour = onlineUptime[onlineMembers.indexOf(newMember)];
-        //for some reason setting onlineUptime[onlineMembers.indexOf(client.users.get(newMember))] as a var screws up the number
+        var hour = onlineUptime[memberIndex];
         hydrationChannel.send(client.users.get(newMember).toString() + ", You've been online for over " +hour +" hour(s). By this point, you should have consumed " +hour  * 4 +"oz (" +hour * 120 +"mL) of water to maintain optimum hydration.");
-        onlineUptime[onlineMembers.indexOf(newMember)]++;
+        onlineUptime[memberIndex]++;
         consoleToChannel("Reminder sent to " +newMember +". Reminding " +newMember +" again in 1 hour.");
         setTimeout(hydrateReminder, 3600000);
       }
     }
-    //problem: if last newMember was offline, this would repeat the "offline" function which would end up removing all of the objects in the array, so maybe change newMember to another variable?
-    // new problem: seems to splice the last item instead of actual indexed item
-    // and now stuff is occuring at half the time
     else if ((status === 'offline' || status === 'dnd') && onlineMembers.includes(newMember) === true)
     {
-      onlineUptime.splice(index, 1);
-      onlineMembers.splice(index, 1);
+      onlineUptime.splice(memberIndex, 1);
+      onlineMembers.splice(memberIndex, 1);
       consoleToChannel("Stopping " +client.users.get(newMember).toString() +"'s reminders.");
       clearTimeout(loopVar);
-      //newMember = onlineMembers[onlineMembers.length-1];
-      //if (onlineMembers.length === 0) 
-      //{
-        //consoleToChannel("Clearing Loop...");
-        //consoleToChannel(onlineMembers);
-        //consoleToChannel(onlineUptime);
-        //clearInterval(loopVar);
-      //}
     }
   } 
   
@@ -184,14 +174,7 @@ client.on('presenceUpdate', (oldMember, newMember) =>
     client.channels.get(config.console).send("h!eval onlineMembers");
     client.channels.get(config.console).send("h!eval onlineUptime");
   }
-
-//debug events
-//client.on("error", (e) => console.error(e));
-//client.on("warn", (e) => console.warn(e));
 });
-
-
-//client.on("debug", (e) => console.info(e));
 
 //eval command
 function clean(text) {
@@ -219,6 +202,7 @@ client.on("message", message => {
     }
   }
 });
+
 //self ping every 5 minutes
 const http = require('http');
 const express = require('express');
