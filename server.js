@@ -1,214 +1,261 @@
+// initializing constants/variables
 const Discord = require('discord.js');
 const client = new Discord.Client();
-const config = require("./config.json");
-const fs = require("fs");
-const prefix = config.prefix
+const config = require('./config.json');
+const fs = require('fs');
+const Enmap = require('enmap');
+const EnmapLevel = require('enmap-level');
+const hydrationSettingsSource = new EnmapLevel({ name: 'hydrationSettingsTable' });
+const hydrationSettingsTable = new Enmap({ provider: hydrationSettingsSource });
+const prefix = config.prefix;
 const onlineMembers = [];
 const onlineUptime = [];
-  var loopVar;
-  var oldMember;
-  var newMember;
-  var onlineDaily = [];
-  var today = new Date(), lastUpdate;
+const onlineTimer = [];
+var lastReminder = [];
+var oldMemberStatus;
+var newMemberID;
+var loopVar;
+var hydrationLoop;
+var today = new Date(), lastUpdate;
+
+// creates defaultSettings for people who join in
+const defaultSettings = { dehydration: true, hydrationConstant: 1 };
+
+// bot comes online using specific bot token
 client.login(process.env.TOKEN);
-client.on('ready', () => 
+
+// initialises tables when bot loads up
+client.on('ready', () =>
 {
   console.log('I am ready!');
-  client.channels.get(config.console).send("``` I am ready! ```");
-  client.user.setActivity("h!help");
+  client.channels.get(config.console).send('``` I am ready! ```');
+  client.user.setActivity('h!help for more info');
   client.setMaxListeners(11);
+  client.hydrationSettingsTable = new Enmap({ provider: hydrationSettingsSource });
+  client.hydrationSettingsTable.set('onlineDaily', []);
+  client.hydrationSettingsTable.set('onlineMembers', []);
+  client.hydrationSettingsTable.set('onlineTimer', []);
 });
-//main problem; people who go on and off repeatedly may be starting several timeout, to do: enmap storage for dehydration and onlineDaily
-client.on('message', message => {
+
+// upon receiving a message
+client.on('message', message =>
+{
+  // receives arguments from user's message and their current hydration settings
   const args = message.content.slice(prefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
+  const currentSettings = client.hydrationSettingsTable.get(message.author.id);
+
+  // fizzles when user tries to direct message bot
+  if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') return;
+
+  // finds corresponding hydration-room of the server from which message was sent
   const hydrationChannel = message.guild.channels.find('name', 'hydration_room');
-  if (message.author.bot){ if (command === 'eval'){message.delete()} } return;
-  if(message.content.indexOf(config.prefix) !== 0) return;
-  if(command === 'ping') 
+
+  // sends series of commands user can use
+  if (command === 'help')
   {
-    message.channel.send('Pong!');
-    message.delete();
-  } 
-  else if (command === 'blah') 
-  {
-    message.channel.send('Meh');
+    message.author.send('Commands:```h!hydrate - opt into Stay Hydrated Bot\'s reminders (must go offline then online again) \n\nh!dehydrate - opt out of Stay Hydrated Bot\'s reminders \n\nh!interval [number] - sets how often you receive reminders while online (Default is 1 hour). \n\n Note: You will not receive reminders when you are away or on Do Not Disturb```');
   }
-  else if (command === 'help')
-  {
-    message.author.sendMessage("h!hydrate - checks if you're receiving hydration reminders (and tells you how to receive them if you aren't).\nh!dehydrate - Removes you from receiving hydration reminders."); 
-  }
-  else if (command === 'loop')
-  {
-    if(message.author.id !== config.ownerID) {return} 
-    else
-    {
-      var i = 0;
-      message.channel.send('Loop started');
-      loopVar = setInterval(testloop,10000);
-      function testloop() 
-      {
-        message.channel.send(i);
-        i++;
-      }
-    }
-  }
-  else if (command === 'stoploop')
-  {
-    clearInterval(loopVar);
-    message.channel.send('Loop stopped');
-  }
+  // opt out of reminders
   else if (command === 'dehydrate')
   {
-    if (onlineMembers.includes(message.author.id) == true)
-    {
-      onlineUptime.splice(onlineMembers.indexOf(message.author.id), 1);
-      onlineMembers.splice(onlineMembers.indexOf(message.author.id), 1);
-      hydrationChannel.send("Manually removed " + client.users.get(message.author.id).toString() + " from hydration reminders.");
-      console.log(onlineMembers);
-      console.log(onlineUptime);
-    } 
-    else
-    {
-      hydrationChannel.send(client.users.get(message.author.id).toString() + " is not currently being hydrated.");
-    }
-    } 
-  else if (command ==='hydrate')
-  {
-    if (onlineMembers.includes(message.author.id) != true)
-    {
-      message.author.sendMessage("Click on the bottom left, and select 'invisible' and then 'oniline' to receive hydration reminders again.");
-    }
-    else
-    {
-      hydrationChannel.send(client.users.get(message.author.id).toString() + " is already being reminded");
-    }
-  }
-  {
+    client.hydrationSettingsTable.set(message.author.id, defaultSettings);
+    hydrationChannel.send('<@' + message.author.id.toString() + '> will no longer receive hydration reminders.');
+    consoleToChannel(message.author.id + ' opted out of reminders.');
     message.delete();
+  }
+  // opt into reminders
+  else if (command === 'hydrate')
+  {
+    currentSettings.dehydration = false;
+    client.hydrationSettingsTable.set(message.author.id, currentSettings);
+    hydrationChannel.send('<@' + message.author.id.toString() + '> will begin receiving hydration reminders (Please go offline then online now).');
+    consoleToChannel(message.author.id + ' opted in reminders.');
+    message.delete();
+  }
+  // allows user to change how often they get reminded
+  else if (command === 'interval')
+  {
+    let constant = args[0];
+    if (constant < 1)
+    {
+      message.author.send('The time between reminders must be at least 1 hour.');
+      return;
+    }
+    else if (!constant)
+    {
+      message.author.send('Please input a number for the amount of hours between reminders (h!interval [number])');
+      return;
+    }
+    else if (constant > 24)
+    {
+      message.author.send('The time between reminders must be at most 24 hours.');
+      return;
+    }
+
+    // sets the new reminder time into the table
+    currentSettings.hydrationConstant = constant;
+    client.hydrationSettingsTable.set(message.author.id, currentSettings);
+    hydrationChannel.send('You will now receive reminders every ' + constant + ' hour(s). (Please go offline and online for the changes to take effect.)');
+    consoleToChannel(message.author.id + ' changed their constant to ' + constant);
   }
 });
 
-//hydration stuff
-client.on('presenceUpdate', (oldMember, newMember) => 
+// when user's online status changes
+client.on('presenceUpdate', (oldMember, newMember) =>
 {
-  oldMember = oldMember.presence.status;
+  // finds hydration room in user's respective server
   const hydrationChannel = newMember.guild.channels.find('name', 'hydration_room');
-  newMember = newMember.id;
-  var status = client.users.get(newMember).presence.status
-  var memberIndex = onlineMembers.indexOf(newMember);
-  var time = new Date();
-  var hydrationLoop;
-  //for clearing onlineDaily - not developed by me
+
+  // stores info of user before their presence changed and after wards
+  oldMemberStatus = oldMember.presence.status;
+  newMemberID = newMember.id;
+  var status = client.users.get(newMemberID).presence.status;
+
+  // if user has yet to have any hydration settings, assign default settings
+  if (!client.hydrationSettingsTable.get(newMemberID))
+  {
+    client.hydrationSettingsTable.set(newMemberID, defaultSettings);
+  }
+
+  const currentSettings = client.hydrationSettingsTable.get(newMemberID);
+
+  // for clearing onlineDaily - next 8 lines taken from stack overflow
   // If we haven't checked yet, or if it's been more than 30 seconds since the last check
-  if ( !lastUpdate || ( time.getTime() - lastUpdate.getTime() ) > 30000 ) 
+  var time = new Date();
+  if (!lastUpdate || (time.getTime() - lastUpdate.getTime()) > 30000)
   {
     // Set the last time we checked, and then check if the date has changed.
-    lastUpdate = time
-    if ( time.getDate() !== today.getDate() ) 
+    lastUpdate = time;
+    if (time.getDate() !== today.getDate())
     {
       // If the date has changed, set the date to the new date, and refresh stuff.
       today = time;
-      onlineDaily = [];
-      consoleToChannel("Clearing onlineDaily...");
+      client.hydrationSettingsTable.set('onlineDaily', []);
+      consoleToChannel('Clearing onlineDaily...');
     }
   }
-  //add members to onlineMembers and onlineUptime when they come online)
-  if (client.users.get(newMember).bot != true)
+
+  // add members to onlineMembers and onlineUptime when they come online, if they are not a bot, away, or on dnd
+  if (client.users.get(newMemberID).bot != true)
   {
-    if(oldMember === 'offline' || oldMember === 'dnd')
+    if(oldMemberStatus === 'offline' || oldMemberStatus === 'dnd')
+    {
+      if (status === 'online' || status === 'idle')
       {
-        if (status === 'online' || status === 'idle') 
+        consoleToChannel(newMemberID + ' has logged in.');
+        if (currentSettings.dehydration == false)
+        {
+          // sends daily reminder if they are not in onlineDaily array
+          if (client.hydrationSettingsTable.get('onlineDaily').includes(newMemberID) !== true)
           {
-            if (onlineMembers.includes(newMember) !== true)
-            {
-              onlineMembers.push(newMember);
-              onlineUptime.push(1);
-              consoleToChannel(newMember +" has logged in. Reminding " +newMember +" in 1 hour");
-              loopVar = setTimeout(hydrateReminder, 3600000)
-            }
-            if (onlineDaily.includes(newMember) !== true)
-            {
-              onlineDaily.push(newMember);
-              console.log("Daily reminder sent");
-              //maybe move below line outside of if so it can send to multiple servers?
-              hydrationChannel.send("Hello " + client.users.get(newMember).toString() + ". Remember to stay hydrated!");
-            }
+            client.hydrationSettingsTable.push('onlineDaily', newMemberID);
+            console.log('Daily reminder sent');
+            hydrationChannel.send('Hello ' + client.users.get(newMemberID).toString() + '. This is your daily reminder to stay hydrated!');
           }
-      }
-    else if ((status === 'offline' || status === 'dnd') && onlineMembers.includes(newMember) === true)
-    {
-      //goes to hydrate reminder because it already has a built in thing to splice out the member
-      hydrateReminder();
-    }
-  }
-  
-  //reminder function
-  function hydrateReminder() 
-  {
-    if (status === 'online' || status === 'idle') 
-    {
-      if (onlineMembers.includes(newMember) === true)
-      {
-        var hour = onlineUptime[memberIndex];
-        hydrationChannel.send(client.users.get(newMember).toString() + ", You've been online for over " +hour +" hour(s). By this point, you should have consumed " +hour  * 4 +"oz (" +hour * 120 +"mL) of water to maintain optimum hydration.");
-        onlineUptime[memberIndex]++;
-        consoleToChannel("Reminder sent to " +newMember +". Reminding " +newMember +" again in 1 hour.");
-        setTimeout(hydrateReminder, 3600000);
+          // adds user to array of currently online users that opted into reminders
+          if (onlineMembers.includes(newMemberID) != true)
+          {
+            var reminderTime = new Date;
+            onlineMembers.push(newMemberID);
+            onlineUptime.push(1);
+            onlineTimer.push(setTimeout(hydrateReminder, currentSettings.hydrationConstant * 3600000));
+            lastReminder.push(reminderTime);
+            consoleToChannel('Reminding ' + newMemberID + ' in ' + currentSettings.hydrationConstant + ' hour(s)');
+          }
+        }
       }
     }
-    else if ((status === 'offline' || status === 'dnd') && onlineMembers.includes(newMember) === true)
+    // removes users from onlineMember array and stops any running reminders
+    else if ((status === 'offline' || status === 'dnd') && onlineMembers.includes(newMemberID) === true)
     {
+      var memberIndex = onlineMembers.indexOf(newMemberID);
       onlineUptime.splice(memberIndex, 1);
       onlineMembers.splice(memberIndex, 1);
-      consoleToChannel("Stopping " +client.users.get(newMember).toString() +"'s reminders.");
-      clearTimeout(loopVar);
+      clearTimeout(onlineTimer[onlineMembers.indexOf(newMemberID)]);
+      onlineTimer.splice(memberIndex, 1);
+      lastReminder.splice(memberIndex, 1);
+      consoleToChannel(newMemberID + ' has logged out. Stopping ' + newMemberID + '\'s reminders');
     }
-  } 
-  
-  //makeshift console
-  function consoleToChannel(output)
+  }
+
+  // reminder function
+  function hydrateReminder()
   {
-    console.log(output);
-    client.channels.get(config.console).send("```" +output +"```");
-    client.channels.get(config.console).send("h!eval onlineMembers");
-    client.channels.get(config.console).send("h!eval onlineUptime");
+    // failsafe for if user doesnt get removed from onlineMembers for some reason
+    memberIndex = onlineMembers.indexOf(newMemberID);
+    if (status === 'online' || status === 'idle')
+    {
+      if (onlineMembers.includes(newMemberID) == true && currentSettings.dehydration == false)
+      {
+        // another failsafe for when there are two running reminders
+        var currentReminder = new Date;
+        if (currentReminder.getTime() - lastReminder[onlineMembers.indexOf(newMemberID)].getTime() > currentSettings.hydrationConstant * 3600000 - 2000)
+        {
+          lastReminder[memberIndex] = currentReminder;
+          var hour = onlineUptime[memberIndex] * currentSettings.hydrationConstant;
+          hydrationChannel.send(client.users.get(newMemberID).toString() + ', You\'ve been online for over ' + hour + ' hour(s). By this point, you should have consumed ' + hour  * 4 + 'oz (' + hour * 120 + 'mL) of water to maintain optimum hydration.');
+          onlineUptime[onlineMembers.indexOf(newMemberID)]++;
+          consoleToChannel(newMemberID + ' has been reminded. Reminding ' + newMemberID + ' again in ' + currentSettings.hydrationConstant + ' hour(s).');
+          setTimeout(hydrateReminder, currentSettings.hydrationConstant * 3600000);
+        }
+      }
+    }
   }
 });
-
-//eval command
-function clean(text) {
-  if (typeof(text) === "string")
-    return text.replace(/`/g, "`" + String.fromCharCode(8203)).replace(/@/g, "@" + String.fromCharCode(8203));
-  else
-      return text;
+// sends console stuff to private discord server (used a lot for troubleshooting and debugging because glitch doesn't store all their console logs)
+function consoleToChannel(output)
+{
+  console.log(output);
+  client.channels.get(config.console).send('```' + output + '```');
 }
 
-client.on("message", message => {
-  const args = message.content.split(" ").slice(1);
+// eval command - taken from anidiotsguide_old.gitbooks.io
+function clean(text)
+{
+  if (typeof (text) === 'string')
+  {
+    return text.replace(/`/g, '`' + String.fromCharCode(8203)).replace(/@/g, '@' + String.fromCharCode(8203));
+  }
+  else
+  {
+    return text;
+  }
+}
 
-  if (message.content.startsWith(config.prefix + "eval")) {
+client.on('message', message =>
+{
+  const args = message.content.split(' ').slice(1);
+
+  if (message.content.startsWith(config.prefix + 'eval'))
+  {
     if(message.author.id !== config.ownerID && message.author.id !== config.botID) return;
-    try {
-      const code = args.join(" ");
+    try
+    {
+      const code = args.join(' ');
       let evaled = eval(code);
 
-      if (typeof evaled !== "string")
-        evaled = require("util").inspect(evaled);
+      if (typeof evaled !== 'string')
+      {
+        evaled = require('util').inspect(evaled);
+      }
 
-      message.channel.send(clean(evaled), {code:"xl"});
-    } catch (err) {
+      message.channel.send(clean(evaled), { code:'xl' });
+    }
+    catch (err)
+    {
       message.channel.send(`\`ERROR\` \`\`\`xl\n${clean(err)}\n\`\`\``);
     }
   }
 });
 
-//self ping every 5 minutes
+// self ping every 5 minutes - provided by glitch.com
 const http = require('http');
 const express = require('express');
 const app = express();
 
 app.listen(8080);
-setInterval(() => {
-http.get(`http://${process.env.PROJECT_DOMAIN}.glitch.me/`);
+setInterval(() =>
+{
+  http.get(`http://${process.env.PROJECT_DOMAIN}.glitch.me/`);
 }, 300000);
