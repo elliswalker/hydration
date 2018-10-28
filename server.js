@@ -5,16 +5,12 @@ const config = require('./config.json');
 const fs = require('fs');
 const Enmap = require('enmap');
 const EnmapLevel = require('enmap-level');
-const hydrationSettingsSource = new EnmapLevel({ name: 'hydrationSettingsTable' });
-const hydrationSettingsTable = new Enmap({ provider: hydrationSettingsSource });
+client.hydrationSettingsTable = new Enmap ({ name: 'hydrationSettings', autoFetch: true, fetchAll: false });
 const prefix = config.prefix;
 const onlineMembers = [];
 const onlineUptime = [];
 const onlineTimer = [];
 var lastReminder = [];
-var oldMemberStatus;
-var newMemberID;
-var loopVar;
 var hydrationLoop;
 var today = new Date(), lastUpdate;
 
@@ -31,10 +27,7 @@ client.on('ready', () =>
   client.channels.get(config.console).send('``` I am ready! ```');
   client.user.setActivity('h!help for more info');
   client.setMaxListeners(11);
-  client.hydrationSettingsTable = new Enmap({ provider: hydrationSettingsSource });
   client.hydrationSettingsTable.set('onlineDaily', []);
-  client.hydrationSettingsTable.set('onlineMembers', []);
-  client.hydrationSettingsTable.set('onlineTimer', []);
 });
 
 // upon receiving a message
@@ -49,7 +42,7 @@ client.on('message', message =>
   if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') return;
 
   // finds corresponding hydration-room of the server from which message was sent
-  const hydrationChannel = message.guild.channels.find('name', 'hydration_room');
+  const hydrationChannel = message.guild.channels.find(channel => channel.name === 'hydration_room');
 
   // sends series of commands user can use
   if (command === 'help')
@@ -67,22 +60,29 @@ client.on('message', message =>
   // opt into reminders
   else if (command === 'hydrate')
   {
-    currentSettings.dehydration = false;
-    client.hydrationSettingsTable.set(message.author.id, currentSettings);
-    hydrationChannel.send('<@' + message.author.id.toString() + '> will begin receiving hydration reminders (Please go offline then online now).');
-    consoleToChannel(message.author.id + ' opted in reminders.');
-    message.delete();
+    if (currentSettings.dehydration !== false)
+    {
+      currentSettings.dehydration = false;
+      client.hydrationSettingsTable.set(message.author.id, currentSettings);
+      hydrationChannel.send('<@' + message.author.id.toString() + '> will begin receiving hydration reminders (Please go offline then online now).');
+      consoleToChannel(message.author.id + ' opted in reminders.');
+      message.delete();
+    }
+    else
+    {
+      hydrationChannel.send('You are already receiving reminders');
+    }
   }
   // allows user to change how often they get reminded
   else if (command === 'interval')
   {
     let constant = args[0];
-    if (constant < 1)
+    if (constant < 1 && message.author.id !== config.ownerID)
     {
       message.author.send('The time between reminders must be at least 1 hour.');
       return;
     }
-    else if (!constant)
+    else if (!constant || isNaN(constant))
     {
       message.author.send('Please input a number for the amount of hours between reminders (h!interval [number])');
       return;
@@ -105,11 +105,11 @@ client.on('message', message =>
 client.on('presenceUpdate', (oldMember, newMember) =>
 {
   // finds hydration room in user's respective server
-  const hydrationChannel = newMember.guild.channels.find('name', 'hydration_room');
+  const hydrationChannel = newMember.guild.channels.find(channel => channel.name === 'hydration_room');
 
   // stores info of user before their presence changed and after wards
-  oldMemberStatus = oldMember.presence.status;
-  newMemberID = newMember.id;
+  const oldMemberStatus = oldMember.presence.status;
+  const newMemberID = newMember.id;
   var status = client.users.get(newMemberID).presence.status;
 
   // if user has yet to have any hydration settings, assign default settings
@@ -186,9 +186,10 @@ client.on('presenceUpdate', (oldMember, newMember) =>
     memberIndex = onlineMembers.indexOf(newMemberID);
     if (status === 'online' || status === 'idle')
     {
+      console.log(newMemberID + ' is online or idle');
       if (onlineMembers.includes(newMemberID) == true && currentSettings.dehydration == false)
       {
-        // another failsafe for when there are two running reminders
+        // another failsafe for when there are two running reminders or user is in multiple servers
         var currentReminder = new Date;
         if (currentReminder.getTime() - lastReminder[onlineMembers.indexOf(newMemberID)].getTime() > currentSettings.hydrationConstant * 3600000 - 2000)
         {
@@ -253,9 +254,13 @@ client.on('message', message =>
 const http = require('http');
 const express = require('express');
 const app = express();
-
-app.listen(8080);
+app.get('/', (request, response) =>
+{
+  console.log(Date.now() + ' Ping Received');
+  response.sendStatus(200);
+});
+app.listen(process.env.PORT);
 setInterval(() =>
 {
   http.get(`http://${process.env.PROJECT_DOMAIN}.glitch.me/`);
-}, 300000);
+}, 280000);
