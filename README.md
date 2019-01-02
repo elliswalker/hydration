@@ -9,3 +9,5 @@ h!hydrate - opts into the reminders
 h!dehydrate - opts out of the reminders
 
 h!interval [number] - customise how often you receive the reminders
+
+TODO list: shorter reminders, make the reminders persistent whenever the glitch.com unexpectedly resets the bot
