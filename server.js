@@ -27,7 +27,6 @@ client.on('ready', () =>
   client.channels.get(config.console).send('``` I am ready! ```');
   client.user.setActivity('h!help for more info');
   client.setMaxListeners(11);
-  client.hydrationSettingsTable.set('onlineDaily', []);
 });
 
 // upon receiving a message
@@ -39,7 +38,7 @@ client.on('message', message =>
   const currentSettings = client.hydrationSettingsTable.get(message.author.id);
 
   // fizzles when user tries to direct message bot
-  if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') return;
+  if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') {return;}
 
   // finds corresponding hydration-room of the server from which message was sent
   const hydrationChannel = message.guild.channels.find(channel => channel.name === 'hydration_room');
@@ -73,22 +72,25 @@ client.on('message', message =>
       hydrationChannel.send('You are already receiving reminders');
     }
   }
-  // allows user to change how often they get reminded
+  // takes an argument that is an integer and adjusts the hydrationConstant associated with their id number
   else if (command === 'interval')
   {
     let constant = args[0];
     if (constant < 1 && message.author.id !== config.ownerID)
     {
+      // message sent when int constant is too small
       message.author.send('The time between reminders must be at least 1 hour.');
       return;
     }
     else if (!constant || isNaN(constant))
     {
+      // message sent when int constant does not exist
       message.author.send('Please input a number for the amount of hours between reminders (h!interval [number])');
       return;
     }
     else if (constant > 24)
     {
+      // message sent when int constant is too big
       message.author.send('The time between reminders must be at most 24 hours.');
       return;
     }
@@ -99,13 +101,26 @@ client.on('message', message =>
     hydrationChannel.send('You will now receive reminders every ' + constant + ' hour(s). (Please go offline and online for the changes to take effect.)');
     consoleToChannel(message.author.id + ' changed their constant to ' + constant);
   }
+  else if (command === 'dm')
+  {
+    if (!currentSettings.dm || currentSettings.dm == false)
+    {
+      currentSettings.dm = true;
+      client.hydrationSettingsTable.set(message.author.id, currentSettings);
+      message.author.send('You will now begin receiving reminders via direct message.');
+    }
+    else if (currentSettings.dm == true)
+    {
+      currentSettings.dm = false;
+      client.hydrationSettingsTable.set(message.author.id, currentSettings);
+      message.author.send('You will now begin receiving reminders via from the hydration_room channel.');
+    }
+  }
 });
 
 // when user's online status changes
 client.on('presenceUpdate', (oldMember, newMember) =>
 {
-  // finds hydration room in user's respective server
-  const hydrationChannel = newMember.guild.channels.find(channel => channel.name === 'hydration_room');
 
   // stores info of user before their presence changed and after wards
   const oldMemberStatus = oldMember.presence.status;
@@ -117,10 +132,19 @@ client.on('presenceUpdate', (oldMember, newMember) =>
   {
     client.hydrationSettingsTable.set(newMemberID, defaultSettings);
   }
-
+  // grabs settings from table
   const currentSettings = client.hydrationSettingsTable.get(newMemberID);
 
-  // for clearing onlineDaily - next 8 lines taken from stack overflow
+  // set place where users will receive reminders
+  if (!currentSettings.dm || currentSettings.dm == false)
+  {
+    const hydrationChannel = newMember.guild.channels.find(channel => channel.name === 'hydration_room');
+  }
+  else
+  {
+    const hydrationChannel = newMember;
+  }
+  // for clearing onlineDaily - next 8 lines taken from stack overflow - should update with luxon library sometime
   // If we haven't checked yet, or if it's been more than 30 seconds since the last check
   var time = new Date();
   if (!lastUpdate || (time.getTime() - lastUpdate.getTime()) > 30000)
@@ -186,10 +210,10 @@ client.on('presenceUpdate', (oldMember, newMember) =>
     memberIndex = onlineMembers.indexOf(newMemberID);
     if (status === 'online' || status === 'idle')
     {
-      console.log(newMemberID + ' is online or idle');
+      console.log(newMemberID + ' is' + status);
       if (onlineMembers.includes(newMemberID) == true && currentSettings.dehydration == false)
       {
-        // another failsafe for when there are two running reminders or user is in multiple servers
+        // another failsafe for when there are two running reminders or user is in multiple servers - also needs to be updated with luxon
         var currentReminder = new Date;
         if (currentReminder.getTime() - lastReminder[onlineMembers.indexOf(newMemberID)].getTime() > currentSettings.hydrationConstant * 3600000 - 2000)
         {
