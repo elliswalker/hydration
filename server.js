@@ -41,18 +41,18 @@ client.on('message', message =>
   if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') {return;}
 
   // finds corresponding hydration-room of the server from which message was sent
-  const hydrationChannel = message.guild.channels.find(channel => channel.name === 'hydration_room');
+  const hydrationRoom = message.guild.channels.find(channel => channel.name === 'hydration_room');
 
   // sends series of commands user can use
   if (command === 'help')
   {
-    message.author.send('Commands:```h!hydrate - opt into Stay Hydrated Bot\'s reminders (must go offline then online again) \n\nh!dehydrate - opt out of Stay Hydrated Bot\'s reminders \n\nh!interval [number] - sets how often you receive reminders while online (Default is 1 hour). \n\n Note: You will not receive reminders when you are away or on Do Not Disturb```');
+    message.author.send('Commands:```h!hydrate - opt into Stay Hydrated Bot\'s reminders (must go offline then online again) \n\nh!dehydrate - opt out of Stay Hydrated Bot\'s reminders \n\nh!interval [number] - sets how often you receive reminders while online (Default is 1 hour). \n\nh!dm - change whether you receive your hydration reminders via direct message (default is via hydrtion_room) \n\n Note: You will not receive reminders when you are away or on Do Not Disturb```');
   }
   // opt out of reminders
   else if (command === 'dehydrate')
   {
     client.hydrationSettingsTable.set(message.author.id, defaultSettings);
-    hydrationChannel.send('<@' + message.author.id.toString() + '> will no longer receive hydration reminders.');
+    hydrationRoom.send('<@' + message.author.id.toString() + '> will no longer receive hydration reminders.');
     consoleToChannel(message.author.id + ' opted out of reminders.');
     message.delete();
   }
@@ -63,13 +63,13 @@ client.on('message', message =>
     {
       currentSettings.dehydration = false;
       client.hydrationSettingsTable.set(message.author.id, currentSettings);
-      hydrationChannel.send('<@' + message.author.id.toString() + '> will begin receiving hydration reminders (Please go offline then online now).');
+      hydrationRoom.send('<@' + message.author.id.toString() + '> will begin receiving hydration reminders (Please go offline then online now).');
       consoleToChannel(message.author.id + ' opted in reminders.');
       message.delete();
     }
     else
     {
-      hydrationChannel.send('You are already receiving reminders');
+      hydrationRoom.send('You are already receiving reminders');
     }
   }
   // takes an argument that is an integer and adjusts the hydrationConstant associated with their id number
@@ -98,7 +98,7 @@ client.on('message', message =>
     // sets the new reminder time into the table
     currentSettings.hydrationConstant = constant;
     client.hydrationSettingsTable.set(message.author.id, currentSettings);
-    hydrationChannel.send('You will now receive reminders every ' + constant + ' hour(s). (Please go offline and online for the changes to take effect.)');
+    hydrationRoom.send('You will now receive reminders every ' + constant + ' hour(s). (Please go offline and online for the changes to take effect.)');
     consoleToChannel(message.author.id + ' changed their constant to ' + constant);
   }
   else if (command === 'dm')
@@ -126,7 +126,7 @@ client.on('presenceUpdate', (oldMember, newMember) =>
   const oldMemberStatus = oldMember.presence.status;
   const newMemberID = newMember.id;
   var status = client.users.get(newMemberID).presence.status;
-
+  var hydrationChannel;
   // if user has yet to have any hydration settings, assign default settings
   if (!client.hydrationSettingsTable.get(newMemberID))
   {
@@ -138,11 +138,11 @@ client.on('presenceUpdate', (oldMember, newMember) =>
   // set place where users will receive reminders
   if (!currentSettings.dm || currentSettings.dm == false)
   {
-    const hydrationChannel = newMember.guild.channels.find(channel => channel.name === 'hydration_room');
+    hydrationChannel = newMember.guild.channels.find(channel => channel.name === 'hydration_room');
   }
   else
   {
-    const hydrationChannel = newMember;
+    hydrationChannel = newMember;
   }
   // for clearing onlineDaily - next 8 lines taken from stack overflow - should update with luxon library sometime
   // If we haven't checked yet, or if it's been more than 30 seconds since the last check
