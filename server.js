@@ -12,6 +12,7 @@ const onlineUptime = [];
 const onlineTimer = [];
 var lastReminder = [];
 var hydrationLoop;
+var thanks = ['thank'];
 var today = new Date(), lastUpdate;
 
 // creates defaultSettings for people who join in
@@ -29,6 +30,19 @@ client.on('ready', () =>
   client.setMaxListeners(11);
 });
 
+function thanksCheck(content)
+{
+  for (var x of thanks)
+  {
+    if (content.indexOf(x) >= 0)
+    {
+      return true;
+    }
+  }
+  console.log('false');
+  return false;
+}
+
 // upon receiving a message
 client.on('message', message =>
 {
@@ -36,7 +50,10 @@ client.on('message', message =>
   const args = message.content.slice(prefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
   const currentSettings = client.hydrationSettingsTable.get(message.author.id);
-
+  if (message.isMentioned(client.user) && (thanksCheck(message.content)))
+  {
+    setTimeout(function() { message.channel.send("You're welcome, <@" + message.author.id.toString() + '>!'); }, Math.random() * 3000);
+  }
   // fizzles when user tries to direct message bot
   if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') {return;}
 
@@ -280,7 +297,6 @@ const express = require('express');
 const app = express();
 app.get('/', (request, response) =>
 {
-  console.log(Date.now() + ' Ping Received');
   response.sendStatus(200);
 });
 app.listen(process.env.PORT);

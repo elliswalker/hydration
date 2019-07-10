@@ -6,10 +6,10 @@
   "dependencies": {
     "discord.js": "^11.4.2",
     "express": "^4.16.4",
-    "eslint": "^5.7.0",
-    "enmap": "^4.3.2",
+    "eslint": "^5.16.0",
+    "enmap": "^4.8.4",
     "enmap-level": "^2.1.0",
-    "better-sqlite-pool": "*"
+    "better-sqlite-pool": "^0.2.2"
   },
   "devDependencies": {},
   "scripts": {
