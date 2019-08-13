@@ -5,21 +5,26 @@ const config = require('./config.json');
 const fs = require('fs');
 const Enmap = require('enmap');
 const EnmapLevel = require('enmap-level');
+const luxon = require('luxon');
 client.hydrationSettingsTable = new Enmap ({ name: 'hydrationSettings', autoFetch: true, fetchAll: false });
 const prefix = config.prefix;
 const onlineMembers = [];
 const onlineUptime = [];
 const onlineTimer = [];
+var DateTime = luxon.DateTime;
 var lastReminder = [];
 var hydrationLoop;
 var thanks = ['thank'];
+var todayDate = DateTime.local();
 var today = new Date(), lastUpdate;
-
-// creates defaultSettings for people who join in
-const defaultSettings = { dehydration: true, hydrationConstant: 1 };
 
 // bot comes online using specific bot token
 client.login(process.env.TOKEN);
+
+console.log('script start');
+
+// creates defaultSettings for people who join in
+const defaultSettings = { dehydration: true, hydrationConstant: 1, defaultDaily: true, defaultReminder: true, dm: false, manualReminder: false, manualDaily: false };
 
 // initialises tables when bot loads up
 client.on('ready', () =>
@@ -52,7 +57,9 @@ client.on('message', message =>
   const currentSettings = client.hydrationSettingsTable.get(message.author.id);
   if (message.isMentioned(client.user) && (thanksCheck(message.content)))
   {
-    setTimeout(function() { message.channel.send("You're welcome, <@" + message.author.id.toString() + '>!'); }, Math.random() * 3000);
+    message.channel.startTyping();
+    setTimeout(function() { message.channel.send("You're welcome, <@" + message.author.id.toString() + '>!'); }, Math.random() * 2000);
+    message.channel.stopTyping();
   }
   // fizzles when user tries to direct message bot
   if (message.content.indexOf(config.prefix) !== 0 || message.channel.type == 'dm') {return;}
@@ -132,6 +139,26 @@ client.on('message', message =>
       client.hydrationSettingsTable.set(message.author.id, currentSettings);
       message.author.send('You will now begin receiving reminders via from the hydration_room channel.');
     }
+    else if (command === 'reminder')
+    {
+      let reminderStr = message.content.slice(11);
+    }
+    else if (command === 'daily')
+    {
+      let dailyStr = message.content.slice(8);
+      if (dailyStr != '')
+      {
+        currentSettings.defaultDaily = false;
+        currentSettings.customDaily = dailyStr;
+        client.hydrationSettingsTable.set(message.author.id, currentSettings);
+        message.author.send('You have changed your daily reminder: ' + currentSettings.customDaily);
+      }
+      else
+      {
+        currentSettings.defaultDaily = true;
+        message.author.send('You will now receive the default daily reminder');
+      }
+    }
   }
 });
 
@@ -164,14 +191,15 @@ client.on('presenceUpdate', (oldMember, newMember) =>
   // for clearing onlineDaily - next 8 lines taken from stack overflow - should update with luxon library sometime
   // If we haven't checked yet, or if it's been more than 30 seconds since the last check
   var time = new Date();
+  var timeDate = DateTime.local();
   if (!lastUpdate || (time.getTime() - lastUpdate.getTime()) > 30000)
   {
     // Set the last time we checked, and then check if the date has changed.
-    lastUpdate = time;
-    if (time.getDate() !== today.getDate())
+    lastUpdateDate = timeDate;
+    if (timeDate.day !== todayDate.day)
     {
       // If the date has changed, set the date to the new date, and refresh stuff.
-      today = time;
+      todayDate = timeDate;
       client.hydrationSettingsTable.set('onlineDaily', []);
       consoleToChannel('Clearing onlineDaily...');
     }

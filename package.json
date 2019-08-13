@@ -4,12 +4,14 @@
   "description": "",
   "main": "server.js",
   "dependencies": {
-    "discord.js": "^11.4.2",
+    "discord.js": "^11.5.1",
     "express": "^4.16.4",
-    "eslint": "^5.16.0",
-    "enmap": "^4.8.4",
+    "eslint": "^6.1.0",
+    "enmap": "^5.1.0",
     "enmap-level": "^2.1.0",
-    "better-sqlite-pool": "^0.2.2"
+    "better-sqlite-pool": "^0.2.2",
+    "luxon": "^1.17.2",
+    "better-sqlite3": "^5.4.2"
   },
   "devDependencies": {},
   "scripts": {
